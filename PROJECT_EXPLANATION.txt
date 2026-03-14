@@ -1,0 +1,159 @@
+================================================================================
+BLOG WRITER SIMPLE - PROJECT EXPLANATION
+================================================================================
+
+WHAT THIS PROJECT DOES
+----------------------
+This is an AI-powered blog writer. You give it:
+  - A topic (e.g. "Best running shoes", "How AI is changing the IT market")
+  - Approximate max word count
+  - Optional: goal (traffic / leads / authority), tone, location, business context
+  - Optional: recipient email address (used for the email-sending step)
+
+It then:
+  1. Plans and writes a full SEO-oriented blog (intro, sections, FAQ, conclusion, optional CTA)
+  2. Optionally does web research (Tavily) when the goal is "authority" or the topic implies stats/trends
+  3. Optimizes for SEO (meta title, meta description, slug, keyword placement)
+  4. Scores quality and can re-optimize if below a threshold
+  5. Can send the finished blog as a formatted HTML email via Resend
+
+So in one run you get: a complete, structured blog post (and optionally an email with that content).
+
+
+HOW IT WORKS (HIGH LEVEL)
+-------------------------
+The app uses LangGraph: a graph of "nodes" that share a single state (BlogState).
+Each node is a step (e.g. "analyze context", "plan outline", "write sections").
+The graph has conditional edges: e.g. "if research is required, run research; else go to planner",
+"if word count is over budget, compress; else go to SEO", "if quality score is low, re-run SEO".
+
+Flow in short:
+  Context → Word budget → Research? (yes/no) → Plan outline → Write sections (in parallel) →
+  Merge → Check word count → Compress if needed → SEO optimize → Quality score →
+  If score OK → Format email → Send email (if Resend key set).
+
+
+MAIN FILES
+----------
+  - main.py           FastAPI app: GET /, GET /health, POST /generate. Run with uvicorn for a local API.
+  - run.py            Pipeline entry: run_pipeline() and run_pipeline_async() plus CLI (argparse).
+  - nodes.py          All state (BlogState), config (Settings), LLM setup, and every graph node.
+                      Uses Pydantic for structured LLM outputs (outline, research summary, SEO, quality score, etc.).
+  - graph.py          Builds the LangGraph: adds nodes, entry point, edges, and conditional routing.
+  - blog_generator.py Example script that calls run_pipeline() with a topic and options.
+  - requirements.txt  Dependencies (LangGraph, LangChain OpenAI, FastAPI, uvicorn, Tavily, Resend, etc.).
+  - .env              API keys and settings (OPENAI_API_KEY required; optional TAVILY_API_KEY, RESEND_API_KEY).
+  - Dockerfile              Builds a Docker image that runs the FastAPI app with uvicorn on port 8000.
+  - .dockerignore            Excludes .env, .venv, .git, etc. from the image so it stays small and safe.
+  - .env.example             Template for required/optional env vars (OPENAI_API_KEY, TAVILY, RESEND, etc.).
+  - docker-compose.yml       Build and run the app locally with env from .env.
+  - docker-compose.public.yml Run the published image (for other users); replace YOUR_DOCKERHUB_USERNAME.
+
+
+WAYS TO RUN
+-----------
+  1. FastAPI (local API)
+     uvicorn main:app --reload --host 0.0.0.0 --port 8000
+     Then use POST /generate with JSON body; interactive docs at /docs.
+
+  2. CLI
+     python run.py --topic "..." --approx-max-words 1200 --recipient-email you@example.com [--goal] [--tone] [--location] [--business-context]
+
+  3. From Python
+     from run import run_pipeline, run_pipeline_async
+     result = run_pipeline(topic=..., approx_max_words=..., recipient_email=..., ...)
+
+  4. Docker (local build)
+     docker build -t blog-writer . && docker run --env-file .env -p 8000:8000 blog-writer
+     API is on port 8000; pass OPENAI_API_KEY (and optional TAVILY, RESEND) via env or .env.
+
+  5. Public Docker image (for other users)
+     You can publish the image to Docker Hub so others can run it without building. See README section
+     "Publish image for other users (Docker Hub)" for build/tag/push steps. Users then run:
+       docker pull YOUR_USERNAME/blog-writer-simple:latest
+       docker run -p 8000:8000 -e OPENAI_API_KEY=sk-... YOUR_USERNAME/blog-writer-simple:latest
+     Or use docker-compose.public.yml with image: YOUR_USERNAME/blog-writer-simple:latest and a .env file.
+
+
+THE GRAPH NODES (WHAT EACH STEP DOES)
+-------------------------------------
+  1. ContextAnalyzer
+     Infers "intent" (e.g. informational, commercial_investigation) and whether "local SEO" is needed
+     from topic, business_context, goal, and location.
+
+  2. WordBudgetAllocator
+     Splits approx_max_words across: introduction, N body sections, FAQ, conclusion, and optionally CTA.
+     Number of sections depends on total length (e.g. 3 for short, 5 for long).
+
+  3. ResearchRouter
+     Decides if web research is required: e.g. goal=authority, or topic contains year/dates, "statistics",
+     "trends", "survey", etc.
+
+  4. ResearchNode (only if research_required)
+     Calls Tavily search API, then uses an LLM with structured output (ResearchSummary) to extract
+     facts, keywords, FAQs, suggested headings, and source URLs. Result is stored as research_data.
+
+  5. Planner
+     Uses word budget and optional research_data to produce an outline (Pydantic Outline): ordered items
+     (introduction, sections, faq, conclusion, cta) with heading, target_words, and bullets per item.
+
+  6. SectionGenerator
+     For each outline item, calls the writer LLM to generate that section (with optional rewrite to hit
+     word range). Runs sections in parallel with a semaphore (e.g. 4 at a time).
+
+  7. MergeNode
+     Concatenates all section markdown into one document, adds a table of contents, and sets
+     blog_markdown and final_blog.
+
+  8. WordValidator
+     Counts words in the blog and stores word_count in state.
+
+  9. Conditional: Word count over limit?
+     If word_count > approx_max_words * 1.05 → CompressionNode; else → SEOOptimizer.
+
+  10. CompressionNode (only if over budget)
+      Uses the editor LLM to compress the blog to <= approx_max_words while keeping structure, FAQ, CTA.
+
+  11. SEOOptimizer
+      Uses structured output (SEOOutput) to produce meta_title, meta_description, slug, and
+      optimized_markdown (keyword placement, length cap).
+
+  12. QualityScorer
+      Scores the blog 1–10 (structured QualityScore). If score < threshold (e.g. 7), the graph
+      routes back to SEOOptimizer; otherwise to EmailFormatter.
+
+  13. EmailFormatter
+      Generates an email subject line (structured) and full HTML body: markdown → HTML (with
+      code highlighting via Pygments, sanitization via bleach), then "medium-style" layout with
+      inline styles for email clients.
+
+  14. EmailSender
+      Sends the email via Resend API if RESEND_API_KEY is set; otherwise skips and logs.
+
+
+CONFIGURATION
+-------------
+  - .env (or environment): OPENAI_API_KEY (required), OPENAI_MODEL, TAVILY_API_KEY (optional),
+    RESEND_API_KEY (optional), RESEND_FROM_EMAIL, BLOG_QUALITY_THRESHOLD, LOG_LEVEL.
+  - Token limits for LLM calls are derived from word budgets (words_to_max_tokens) so output length
+    is controlled without manual string cutting.
+
+
+TECHNOLOGY STACK
+----------------
+  - LangGraph for the pipeline graph and state.
+  - LangChain + OpenAI for chat and structured outputs (Pydantic).
+  - FastAPI + uvicorn for the local HTTP API.
+  - Tavily for web search when research is needed.
+  - Resend for sending email.
+  - markdown, bleach, Pygments for converting blog markdown to safe, styled HTML.
+  - Docker for containerized deployment; image can be published to Docker Hub for public use.
+
+
+SUMMARY
+-------
+The project automates end-to-end blog creation: from topic and settings to a finished, SEO-optimized
+post and optional email delivery. You can run it as a local FastAPI server (POST /generate), via the
+CLI (run.py), from Python (run_pipeline / run_pipeline_async), or inside Docker. The pipeline is
+implemented as a LangGraph with research, planning, section writing, compression, SEO, quality check,
+and email formatting/sending.

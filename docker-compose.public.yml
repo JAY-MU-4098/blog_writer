@@ -1,0 +1,15 @@
+# Run the public Docker image (no build). For use by anyone who pulls the image.
+# Replace YOUR_DOCKERHUB_USERNAME with the actual username (e.g. jaydev blog-writer-simple).
+# Create .env from .env.example and set OPENAI_API_KEY at minimum.
+
+version: "3.9"
+
+services:
+  blog-writer:
+    image: YOUR_DOCKERHUB_USERNAME/blog-writer-simple:latest
+    container_name: blog_writer_ai
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    restart: unless-stopped

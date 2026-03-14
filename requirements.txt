@@ -1,0 +1,14 @@
+langgraph
+langchain-core
+langchain-openai
+python-dotenv
+httpx
+markdown
+bleach
+tavily-python
+tenacity
+typing_extensions
+pydantic>=2
+pygments
+fastapi
+uvicorn[standard]

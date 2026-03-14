@@ -1,0 +1,10 @@
+version: "3.9"
+
+services:
+  blog-writer:
+    build: .
+    container_name: blog_writer_ai
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"

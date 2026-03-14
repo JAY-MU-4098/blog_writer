@@ -1,0 +1,26 @@
+# Do not copy secrets or local env into the image
+.env
+.env.*
+!.env.example
+
+# Virtual env and caches
+.venv
+venv
+__pycache__
+*.py[cod]
+*.pyo
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# IDE and OS
+.idea
+.vscode
+.git
+.gitignore
+*.md
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# Keep app code and requirements only
