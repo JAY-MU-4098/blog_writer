@@ -37,6 +37,22 @@ Then run:
 docker run -p 8000:8000 --env-file my.env jaygogra/blog-writer-simple:latest
 ```
 
+**Option C – Docker Compose (recommended):**  
+From the folder where you have `docker-compose.yml` (or `docker-compose.public.yml`), run:
+
+```bash
+docker compose up -d
+```
+
+Generated blog HTML files are saved in a **`generated_blog`** folder **in that same folder** (on your PC). The compose file mounts `./generated_blog` so files appear where you ran the command (e.g. your desktop), not inside the container.
+
+**Option D – plain `docker run` but save files on your PC:**  
+Mount a folder so generated blogs appear on your machine:
+
+```bash
+docker run -p 8000:8000 -v $(pwd)/generated_blog:/app/generated_blog -e OPENAI_API_KEY=sk-your-key jaygogra/blog-writer-simple:latest
+```
+
 ### 3. Use the API
 
 - **API:** http://localhost:8000  

@@ -12,4 +12,7 @@ services:
       - .env
     ports:
       - "8000:8000"
+    # Save generated blog HTML to host: ./generated_blog (same folder as where you run docker compose)
+    volumes:
+      - ./generated_blog:/app/generated_blog
     restart: unless-stopped

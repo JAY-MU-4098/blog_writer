@@ -18,7 +18,7 @@ def _normalize_recipient_email(recipient_email: Union[str, List[str]]) -> List[s
 def run_pipeline(
     topic: str,
     approx_max_words: int,
-    recipient_email: Union[str, List[str]],
+    recipient_email: Optional[Union[str, List[str]]] = None,
     goal: Optional[str] = None,
     tone: Optional[str] = None,
     location: Optional[str] = None,
@@ -26,14 +26,14 @@ def run_pipeline(
 ) -> Dict[str, Any]:
     """
     Run the blog pipeline synchronously.
-    Returns the final state dict (includes final_blog, email_html, email_subject, meta_title, etc.).
-    Also sets result["email"] = email_html for convenience.
+    Returns the final state dict (includes final_blog, email_html, email_subject, meta_title, saved_html_path, etc.).
+    Email is sent only if recipient_email is provided and non-empty.
     """
     graph = build_graph()
     state: Dict[str, Any] = {
         "topic": topic.strip(),
         "approx_max_words": int(approx_max_words),
-        "recipient_email": _normalize_recipient_email(recipient_email),
+        "recipient_email": _normalize_recipient_email(recipient_email or []),
     }
     if goal is not None:
         state["goal"] = goal.strip() or None
@@ -52,7 +52,7 @@ def run_pipeline(
 async def run_pipeline_async(
     topic: str,
     approx_max_words: int,
-    recipient_email: Union[str, List[str]],
+    recipient_email: Optional[Union[str, List[str]]] = None,
     goal: Optional[str] = None,
     tone: Optional[str] = None,
     location: Optional[str] = None,
@@ -60,13 +60,14 @@ async def run_pipeline_async(
 ) -> Dict[str, Any]:
     """
     Run the blog pipeline asynchronously.
-    Returns the final state dict (includes final_blog, email_html, etc.).
+    Returns the final state dict (includes final_blog, email_html, saved_html_path, etc.).
+    Email is sent only if recipient_email is provided and non-empty.
     """
     graph = build_graph()
     state: Dict[str, Any] = {
         "topic": topic.strip(),
         "approx_max_words": int(approx_max_words),
-        "recipient_email": _normalize_recipient_email(recipient_email),
+        "recipient_email": _normalize_recipient_email(recipient_email or []),
     }
     if goal is not None:
         state["goal"] = goal.strip() or None
@@ -86,7 +87,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run the blog writer pipeline")
     parser.add_argument("--topic", required=True, help="Blog topic")
     parser.add_argument("--approx-max-words", type=int, default=1200, help="Approximate max word count")
-    parser.add_argument("--recipient-email", required=True, help="Email address (or comma-separated list)")
+    parser.add_argument("--recipient-email", default=None, help="Optional: email address(es), comma-separated (email sent only if provided)")
     parser.add_argument("--goal", default="traffic", help="Goal: traffic, leads, or authority")
     parser.add_argument("--tone", default="helpful, direct", help="Tone description")
     parser.add_argument("--location", default=None, help="Optional location for local SEO")
@@ -96,7 +97,7 @@ def main() -> None:
     result = run_pipeline(
         topic=args.topic,
         approx_max_words=args.approx_max_words,
-        recipient_email=args.recipient_email,
+        recipient_email=args.recipient_email or [],
         goal=args.goal or None,
         tone=args.tone or None,
         location=args.location,

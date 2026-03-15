@@ -21,7 +21,7 @@ app = FastAPI(
 class BlogGenerateRequest(BaseModel):
     topic: str = Field(..., description="Blog topic")
     approx_max_words: int = Field(1200, ge=200, le=5000, description="Approximate max word count")
-    recipient_email: List[str] = Field(..., description="Email address(es) to send the blog to (for email step)")
+    recipient_email: Optional[List[str]] = Field(default_factory=list, description="Optional: email address(es) to send the blog to (email sent only if non-empty)")
     goal: Optional[str] = Field("traffic", description="Goal: traffic, leads, or authority")
     tone: Optional[str] = Field("helpful, direct", description="Tone description")
     location: Optional[str] = Field(None, description="Optional location for local SEO")
@@ -37,6 +37,7 @@ class BlogGenerateResponse(BaseModel):
     quality_score: Optional[float] = None
     email_subject: Optional[str] = None
     email_html: Optional[str] = None
+    saved_html_path: Optional[str] = None
 
 
 @app.get("/")
@@ -71,6 +72,7 @@ async def generate_blog(req: BlogGenerateRequest) -> BlogGenerateResponse:
             quality_score=result.get("quality_score"),
             email_subject=result.get("email_subject"),
             email_html=result.get("email_html"),
+            saved_html_path=result.get("saved_html_path"),
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

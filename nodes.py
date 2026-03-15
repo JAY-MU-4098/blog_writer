@@ -42,10 +42,14 @@ def words_to_max_tokens(words: int) -> int:
 # State
 # ---------------------------------------------------------------------------
 
+# Folder where generated blog HTML files are saved
+GENERATED_BLOG_DIR = "generated_blog"
+
+
 class BlogState(TypedDict, total=False):
     topic: Required[str]
     approx_max_words: Required[int]
-    recipient_email: Required[List[str]]
+    recipient_email: NotRequired[List[str]]  # optional; email sent only if non-empty
     business_context: NotRequired[Optional[str]]
     location: NotRequired[Optional[str]]
     goal: NotRequired[Optional[str]]
@@ -66,6 +70,7 @@ class BlogState(TypedDict, total=False):
     quality_score: NotRequired[float]
     email_subject: NotRequired[str]
     email_html: NotRequired[str]
+    saved_html_path: NotRequired[str]
 
 
 # ---------------------------------------------------------------------------
@@ -176,6 +181,15 @@ def slugify(text: str) -> str:
     s = re.sub(r"[^\w\s-]", "", s, flags=re.UNICODE)
     s = re.sub(r"[\s_-]+", "-", s, flags=re.UNICODE)
     s = re.sub(r"^-+|-+$", "", s)
+    return s or "blog"
+
+
+def title_to_filename(title: str) -> str:
+    """Convert title to underscore-separated lowercase filename (no extension)."""
+    s = (title or "").strip().lower()
+    s = re.sub(r"[^\w\s-]", "", s, flags=re.UNICODE)
+    s = re.sub(r"[\s\-]+", "_", s, flags=re.UNICODE)
+    s = s.strip("_")
     return s or "blog"
 
 
@@ -739,6 +753,28 @@ async def email_formatter(state: BlogState) -> BlogState:
 
 
 # ---------------------------------------------------------------------------
+# Node: SaveBlogHtml
+# ---------------------------------------------------------------------------
+
+async def save_blog_html(state: BlogState) -> BlogState:
+    """Create generated_blog folder and save the blog HTML file. Filename = underscore-separated lowercase title."""
+    email_html = state.get("email_html") or ""
+    title = _safe_str(state.get("meta_title")) or state.get("topic") or "blog"
+    filename = title_to_filename(title) + ".html"
+    try:
+        dir_path = os.path.join(os.getcwd(), GENERATED_BLOG_DIR)
+        os.makedirs(dir_path, exist_ok=True)
+        file_path = os.path.join(dir_path, filename)
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(email_html)
+        logger.info("SaveBlogHtml", extra={"path": file_path})
+        return {"saved_html_path": os.path.abspath(file_path)}
+    except Exception as e:
+        logger.warning("SaveBlogHtml: could not save file", extra={"error": str(e)})
+        return {}
+
+
+# ---------------------------------------------------------------------------
 # Node: EmailSender
 # ---------------------------------------------------------------------------
 
@@ -756,12 +792,17 @@ async def _send_resend(api_key: str, payload: Dict[str, Any]) -> Dict[str, Any]:
 
 async def email_sender(state: BlogState) -> BlogState:
     global LAST_EMAIL_RESULT
+    recipients = state.get("recipient_email") or []
+    to_email = [e.strip() for e in recipients if e and str(e).strip()]
+    if not to_email:
+        logger.info("EmailSender: skipped (no recipient emails)")
+        LAST_EMAIL_RESULT = {"status": "skipped", "reason": "no_recipients"}
+        return {}
     s = get_settings()
     if not s.resend_api_key:
         logger.warning("EmailSender: no RESEND_API_KEY")
         LAST_EMAIL_RESULT = {"status": "skipped", "reason": "missing_resend_api_key"}
         return {}
-    to_email = [e.strip() for e in state["recipient_email"]]
     subject = state.get("email_subject") or state.get("meta_title") or state["topic"]
     html = state.get("email_html") or ""
     payload = {"from": s.resend_from_email, "to": to_email, "subject": subject, "html": html}

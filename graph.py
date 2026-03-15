@@ -17,6 +17,7 @@ from nodes import (
     quality_scorer,
     research_node,
     research_router,
+    save_blog_html,
     section_generator,
     seo_optimizer,
     word_budget_allocator,
@@ -38,6 +39,7 @@ def build_graph():
     graph.add_node("SEOOptimizer", seo_optimizer)
     graph.add_node("QualityScorer", quality_scorer)
     graph.add_node("EmailFormatter", email_formatter)
+    graph.add_node("SaveBlogHtml", save_blog_html)
     graph.add_node("EmailSender", email_sender)
 
     graph.set_entry_point("ContextAnalyzer")
@@ -68,7 +70,8 @@ def build_graph():
         return "SEOOptimizer" if score < threshold else "EmailFormatter"
 
     graph.add_conditional_edges("QualityScorer", route_quality, {"SEOOptimizer": "SEOOptimizer", "EmailFormatter": "EmailFormatter"})
-    graph.add_edge("EmailFormatter", "EmailSender")
+    graph.add_edge("EmailFormatter", "SaveBlogHtml")
+    graph.add_edge("SaveBlogHtml", "EmailSender")
     graph.add_edge("EmailSender", END)
 
     return graph.compile()
